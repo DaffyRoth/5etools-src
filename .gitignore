@@ -1,6 +1,5 @@
 desktop.ini
 node_modules
-# img
 
 # IntelliJ project files
 .idea/
@@ -29,4 +28,5 @@ sw-injector.js
 
 # Dev scripts
 dev-*.sh
-"img/" 
+ 
+img/
