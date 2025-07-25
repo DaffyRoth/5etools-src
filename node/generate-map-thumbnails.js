@@ -80,7 +80,7 @@ async function pMain () {
 			while (tasksGenThumbnail.length) {
 				const {imgPath, thumbPath} = tasksGenThumbnail.pop();
 				const extInput = imgPath.toLowerCase().split(".").last();
-				await webpFile({pathInput: `img/${imgPath}`, pathOutput: `img/${thumbPath}`, extInput});
+				await webpFile({pathInput: `https://the-library-of-many-things.onrender.com/img/${imgPath}`, pathOutput: `https://the-library-of-many-things.onrender.com/img/${thumbPath}`, extInput});
 				cnt++;
 				if ((cnt % 25) === 0) console.log(`Generated ${cnt}...`);
 			}

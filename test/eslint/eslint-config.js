@@ -12,7 +12,7 @@ export const CONFIG_IGNORES = {
 		"fonts/*",
 		"homebrew/*",
 		"icon/*",
-		"img/*",
+		"https://the-library-of-many-things.onrender.com/img/*",
 		"prerelease/*",
 		"scss/*",
 		"search/*",

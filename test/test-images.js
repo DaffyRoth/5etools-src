@@ -174,7 +174,7 @@ class _TestTokenImagesBase {
 }
 
 class _TestTokenImagesBestiary extends _TestTokenImagesBase {
-	_PATH_BASE = `./img/bestiary/tokens`;
+	_PATH_BASE = `./https://the-library-of-many-things.onrender.com/img/bestiary/tokens`;
 	_PROP = "monster";
 	_NAME = "bestiary";
 
@@ -196,7 +196,7 @@ class _TestTokenImagesBestiary extends _TestTokenImagesBase {
 }
 
 class _TestTokenImagesObjects extends _TestTokenImagesBase {
-	_PATH_BASE = `./img/objects/tokens`;
+	_PATH_BASE = `./https://the-library-of-many-things.onrender.com/img/objects/tokens`;
 	_PROP = "object";
 	_NAME = "objects";
 
@@ -206,7 +206,7 @@ class _TestTokenImagesObjects extends _TestTokenImagesBase {
 }
 
 class _TestTokenImagesVehicles extends _TestTokenImagesBase {
-	_PATH_BASE = `./img/vehicles/tokens`;
+	_PATH_BASE = `./https://the-library-of-many-things.onrender.com/img/vehicles/tokens`;
 	_PROP = "vehicle";
 	_NAME = "vehicles";
 
@@ -224,7 +224,7 @@ class _TestAdventureBookImages {
 		const getHandler = (filename, out) => {
 			const checkHref = (href) => {
 				if (href?.type !== "internal") return;
-				if (fs.existsSync(`./img/${href.path}`)) return;
+				if (fs.existsSync(`./https://the-library-of-many-things.onrender.com/img/${href.path}`)) return;
 				out.push(`${filename} :: ${href.path}`);
 			};
 

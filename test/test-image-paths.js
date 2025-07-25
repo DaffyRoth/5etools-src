@@ -32,8 +32,8 @@ async function main () {
 					}
 
 					const pathOut = `${imgDirs[0]}/${obj.href.path.slice(dir.length + 1)}`;
-					const pathInFull = `img/${obj.href.path}`;
-					const pathOutFull = `img/${pathOut}`;
+					const pathInFull = `https://the-library-of-many-things.onrender.com/img/${obj.href.path}`;
+					const pathOutFull = `https://the-library-of-many-things.onrender.com/img/${pathOut}`;
 
 					fs.mkdirSync(pathOutFull.split("/").slice(0, -1).join("/"), {recursive: true});
 					fs.copyFileSync(pathInFull, pathOutFull);

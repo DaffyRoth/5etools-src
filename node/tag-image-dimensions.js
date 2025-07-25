@@ -18,7 +18,7 @@ function getFileProbeTarget (path) {
 
 function getProbeTarget (imgEntry, {localBrewDir = null, localBrewDirImg = null, isAllowExternal = false}) {
 	if (imgEntry.href.type === "internal") {
-		return getFileProbeTarget(`img/${imgEntry.href.path}`);
+		return getFileProbeTarget(`https://the-library-of-many-things.onrender.com/img/${imgEntry.href.path}`);
 	}
 
 	if (imgEntry.href.type === "external") {

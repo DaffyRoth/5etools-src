@@ -215,7 +215,7 @@ class NavBar {
 			NavBar._CAT_CACHE,
 			{
 				html: "Preload All Images <small>(4GB+)</small>",
-				click: (evt) => NavBar.InteractionManager._pOnClick_button_preloadOffline(evt, {route: /img/, isRequireImages: true}),
+				click: (evt) => NavBar.InteractionManager._pOnClick_button_preloadOffline(evt, {route: /https://the-library-of-many-things.onrender.com/img/, isRequireImages: true}),
 				title: "Preload all images for offline use.",
 			},
 		);
