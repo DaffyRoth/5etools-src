@@ -51,6 +51,13 @@
 	<!-- OpenSearch -->
 	<link rel="search" href="open-search.xml" title="Search 5etools" type="application/opensearchdescription+xml">
 
+	<!-- Aiko’s CDN override -->
+    <script>
+      const IMG_BASE_URL = "https://the-library-of-many-things.onrender.com/img/";
+      // If you use Renderer.setBaseUrl anywhere, point that at the root:
+      Renderer.setBaseUrl("https://the-library-of-many-things.onrender.com/");
+    </script>
+	
 	<script type="text/javascript" src="sw-injector.js"></script>
 
 	<script type="module" src="js/styleswitch.js"></script>
