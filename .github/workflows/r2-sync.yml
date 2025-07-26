@@ -3,48 +3,46 @@ name: Sync images to Cloudflare R2
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 6 * * *'   # every day at 06:00 UTC
+    - cron: '0 6 * * *'
 
 jobs:
   sync-images:
     runs-on: ubuntu-latest
     steps:
-      # 1) Grab the 5e.tools images ZIP
       - name: Download official imgs.zip
         run: |
           curl -L https://get.5e.tools/imgs.zip -o imgs.zip
 
-      # 2) Unzip into img/
-      - name: Unzip images
+      - name: Unzip into img/
         run: |
           mkdir -p img
-          unzip imgs.zip -d img
+          unzip -o imgs.zip -d img
 
-      # 3) Install rclone
       - name: Install rclone
         run: |
           curl https://rclone.org/install.sh | sudo bash
 
-      # 4) Configure rclone for Cloudflare R2
-      - name: Configure rclone
+      - name: Configure rclone for R2
         run: |
           mkdir -p ~/.config/rclone
           cat <<EOF > ~/.config/rclone/rclone.conf
           [cf-r2]
           type = s3
           provider = Cloudflare
-          access_key_id = ${{ secrets.R2_ACCESS_KEY_ID }}
+          access_key_id     = ${{ secrets.R2_ACCESS_KEY_ID }}
           secret_access_key = ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          endpoint = ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          region = auto
+          endpoint          = ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          region            = auto
           insecure_skip_verify = true
           EOF
 
-      # 5) Dry‑run so you can confirm it sees everything
       - name: Dry‑run upload
-        run: rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img --dry-run --progress
+        run: |
+          rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img \
+            --dry-run --progress
 
-      # 6) Actual upload
-      - name: Upload to R2
+      - name: Actual upload to R2
         if: ${{ success() }}
-        run: rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img --progress
+        run: |
+          rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img \
+            --progress
