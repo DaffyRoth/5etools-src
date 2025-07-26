@@ -1,35 +1,50 @@
 name: Sync images to Cloudflare R2
 
 on:
-  push:
-    paths:
-      - 'img/**'
-      - '.github/workflows/r2-sync.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'   # every day at 06:00 UTC
 
 jobs:
-  sync:
+  sync-images:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Check out source
-      uses: actions/checkout@v3
+      # 1) Grab the 5e.tools images ZIP
+      - name: Download official imgs.zip
+        run: |
+          curl -L https://get.5e.tools/imgs.zip -o imgs.zip
 
-    - name: Install rclone
-      run: |
-        curl https://rclone.org/install.sh | sudo bash
+      # 2) Unzip into img/
+      - name: Unzip images
+        run: |
+          mkdir -p img
+          unzip imgs.zip -d img
 
-    - name: Configure rclone for R2
-      run: |
-        mkdir -p ~/.config/rclone
-        cat > ~/.config/rclone/rclone.conf <<EOF
-        [cf-r2]
-        type = s3
-        provider = Other
-        access_key_id = ${{ secrets.R2_ACCESS_KEY_ID }}
-        secret_access_key = ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        endpoint = https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-        EOF
+      # 3) Install rclone
+      - name: Install rclone
+        run: |
+          curl https://rclone.org/install.sh | sudo bash
 
-    - name: Sync img folder to R2
-      run: |
-        rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img --progress
+      # 4) Configure rclone for Cloudflare R2
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          cat <<EOF > ~/.config/rclone/rclone.conf
+          [cf-r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret_access_key = ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          endpoint = ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          region = auto
+          insecure_skip_verify = true
+          EOF
+
+      # 5) Dry‑run so you can confirm it sees everything
+      - name: Dry‑run upload
+        run: rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img --dry-run --progress
+
+      # 6) Actual upload
+      - name: Upload to R2
+        if: ${{ success() }}
+        run: rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img --progress
