@@ -1,64 +1,63 @@
 name: Sync images to Cloudflare R2
 
+# manual trigger & daily at 06:00 UTC
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 6 * * *'   # daily at 06:00 UTC
+    - cron: '0 6 * * *'
 
 jobs:
   sync-images:
     runs-on: ubuntu-latest
+
     steps:
-      # 1) Checkout your code so imgs.zip (and everything) is available
+      # 1) grab your code so imgs.zip can overwrite into the workspace
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2) Download the master zip of images
+      # 2) fetch the official images archive
       - name: Download official imgs.zip
         run: |
           curl -L https://get.5e.tools/imgs.zip -o imgs.zip
 
-      # 3) Unzip into an `img/` folder
+      # 3) unpack it into img/
       - name: Unzip into img/
         run: |
           mkdir -p img
-          unzip -q imgs.zip -d img
+          unzip imgs.zip -d img
 
-      # 4) DEBUG: list what we now have at the root
-      - name: List repo root
-        run: ls -R .
-
-      # 5) DEBUG: list contents of img/
+      # 4) (debug) confirm files are present
       - name: List contents of img/
-        run: ls -R img
+        run: |
+          ls -R img
 
-      # 6) Install rclone
+      # 5) install rclone
       - name: Install rclone
         run: |
           curl https://rclone.org/install.sh | sudo bash
 
-      # 7) Configure it to point at your R2 bucket
+      # 6) configure Cloudflare R2 credentials
       - name: Configure rclone for R2
         run: |
           mkdir -p ~/.config/rclone
           cat <<EOF > ~/.config/rclone/rclone.conf
           [cf-r2]
-          type = s3
-          provider = Cloudflare
-          access_key_id     = ${{ secrets.R2_ACCESS_KEY_ID }}
-          secret_access_key = ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          endpoint          = ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          region            = auto
+          type                = s3
+          provider            = Cloudflare
+          access_key_id       = ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret_access_key   = ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          endpoint            = ${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          region              = auto
           insecure_skip_verify = true
           EOF
 
-      # 8) Dry‑run so we can see what would be sent
+      # 7) dry‑run so you can inspect
       - name: Dry‑run upload
         run: |
           rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img \
             --dry-run --progress
 
-      # 9) REAL upload if the dry‑run succeeded
+      # 8) real upload if dry‑run passed
       - name: Actual upload to R2
         if: ${{ success() }}
         run: |
