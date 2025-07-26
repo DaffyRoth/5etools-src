@@ -1,31 +1,40 @@
 name: Sync images to Cloudflare R2
 
+# manual trigger & daily at 06:00 UTC
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 6 * * *'  # every day at 06:00 UTC
+    - cron: '0 6 * * *'
 
 jobs:
   sync-images:
     runs-on: ubuntu-latest
     steps:
-      # ← ADD THIS
-      - name: Check out repository
+      # 1) Grab your code so "imgs.zip" can be downloaded into the runner
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2) Download the master zip of images
       - name: Download official imgs.zip
         run: |
           curl -L https://get.5e.tools/imgs.zip -o imgs.zip
 
+      # 3) Unzip into an `img/` folder
       - name: Unzip into img/
         run: |
           mkdir -p img
           unzip -o imgs.zip -d img
 
+      # 4) (Debug) List what we now have
+      - name: List contents of img/
+        run: ls -R img
+
+      # 5) Install rclone
       - name: Install rclone
         run: |
           curl https://rclone.org/install.sh | sudo bash
 
+      # 6) Configure it to point at your R2 bucket
       - name: Configure rclone for R2
         run: |
           mkdir -p ~/.config/rclone
@@ -40,11 +49,13 @@ jobs:
           insecure_skip_verify = true
           EOF
 
+      # 7) Dry‑run so we can see what would get sent
       - name: Dry‑run upload
         run: |
           rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img \
             --dry-run --progress
 
+      # 8) REAL upload if the dry‑run succeeded
       - name: Actual upload to R2
         if: ${{ success() }}
         run: |
