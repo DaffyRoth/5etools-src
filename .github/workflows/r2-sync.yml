@@ -1,0 +1,35 @@
+name: Sync images to Cloudflare R2
+
+on:
+  push:
+    paths:
+      - 'img/**'
+      - '.github/workflows/r2-sync.yml'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out source
+      uses: actions/checkout@v3
+
+    - name: Install rclone
+      run: |
+        curl https://rclone.org/install.sh | sudo bash
+
+    - name: Configure rclone for R2
+      run: |
+        mkdir -p ~/.config/rclone
+        cat > ~/.config/rclone/rclone.conf <<EOF
+        [cf-r2]
+        type = s3
+        provider = Other
+        access_key_id = ${{ secrets.R2_ACCESS_KEY_ID }}
+        secret_access_key = ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        endpoint = https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        EOF
+
+    - name: Sync img folder to R2
+      run: |
+        rclone sync img cf-r2:${{ secrets.R2_BUCKET_NAME }}/img --progress
