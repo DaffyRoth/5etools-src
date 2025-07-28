@@ -1,0 +1,208 @@
+name: Sync 5etools Images to R2
+
+on:
+  # Run daily at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+  # Allow manual trigger
+  workflow_dispatch:
+  # Run on push to main branch
+  push:
+    branches: [ main ]
+
+jobs:
+  sync-images:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y p7zip-full curl jq
+        pip install boto3
+    
+    - name: Check for latest release
+      id: check_release
+      run: |
+        # Get the latest release from 5etools-mirror-3
+        LATEST_RELEASE=$(curl -s https://api.github.com/repos/5etools-mirror-3/5etools-img/releases/latest | jq -r .tag_name)
+        echo "Latest release: $LATEST_RELEASE"
+        echo "latest_release=$LATEST_RELEASE" >> $GITHUB_OUTPUT
+        
+        # Check if we've already processed this release
+        if [ -f .last_processed_release ]; then
+          LAST_PROCESSED=$(cat .last_processed_release)
+          if [ "$LATEST_RELEASE" == "$LAST_PROCESSED" ]; then
+            echo "Already processed release $LATEST_RELEASE"
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+          else
+            echo "New release found: $LATEST_RELEASE"
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "First run, processing release $LATEST_RELEASE"
+          echo "needs_update=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Download image archives
+      if: steps.check_release.outputs.needs_update == 'true'
+      run: |
+        RELEASE_TAG=${{ steps.check_release.outputs.latest_release }}
+        mkdir -p downloads
+        cd downloads
+        
+        # Download all parts of the split archive
+        echo "Downloading image archives..."
+        for i in {01..10}; do
+          FILE="img-${RELEASE_TAG#v}.z${i}"
+          URL="https://github.com/5etools-mirror-3/5etools-img/releases/download/${RELEASE_TAG}/${FILE}"
+          echo "Downloading $FILE..."
+          curl -L -O "$URL"
+        done
+        
+        # Download the main zip file
+        FILE="img-${RELEASE_TAG#v}.zip"
+        URL="https://github.com/5etools-mirror-3/5etools-img/releases/download/${RELEASE_TAG}/${FILE}"
+        echo "Downloading $FILE..."
+        curl -L -O "$URL"
+        
+        cd ..
+    
+    - name: Extract images
+      if: steps.check_release.outputs.needs_update == 'true'
+      run: |
+        RELEASE_TAG=${{ steps.check_release.outputs.latest_release }}
+        mkdir -p extracted
+        cd downloads
+        
+        # Extract the multi-part archive
+        echo "Extracting images..."
+        7z x "img-${RELEASE_TAG#v}.zip" -o../extracted -y
+        
+        cd ..
+        
+        # Verify extraction
+        echo "Extracted files:"
+        find extracted -type f | head -20
+        echo "Total files: $(find extracted -type f | wc -l)"
+    
+    - name: Sync to R2
+      if: steps.check_release.outputs.needs_update == 'true'
+      env:
+        R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+        R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      run: |
+        # Create Python script for R2 upload
+        cat > upload_to_r2.py << 'EOF'
+        import os
+        import boto3
+        from botocore.config import Config
+        import mimetypes
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        
+        # R2 configuration
+        account_id = os.environ['R2_ACCOUNT_ID']
+        access_key = os.environ['R2_ACCESS_KEY_ID']
+        secret_key = os.environ['R2_SECRET_ACCESS_KEY']
+        bucket_name = os.environ['R2_BUCKET_NAME']
+        
+        # Create R2 client
+        r2 = boto3.client(
+            's3',
+            endpoint_url=f'https://{account_id}.r2.cloudflarestorage.com',
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=Config(
+                signature_version='s3v4',
+                s3={'addressing_style': 'path'}
+            )
+        )
+        
+        # Thread-safe counter
+        upload_count = 0
+        upload_lock = threading.Lock()
+        
+        def upload_file(local_path, r2_path):
+            global upload_count
+            try:
+                # Determine content type
+                content_type, _ = mimetypes.guess_type(local_path)
+                if not content_type:
+                    content_type = 'application/octet-stream'
+                
+                # Upload file
+                with open(local_path, 'rb') as f:
+                    r2.put_object(
+                        Bucket=bucket_name,
+                        Key=r2_path,
+                        Body=f,
+                        ContentType=content_type
+                    )
+                
+                with upload_lock:
+                    upload_count += 1
+                    if upload_count % 100 == 0:
+                        print(f"Uploaded {upload_count} files...")
+                
+                return f"Success: {r2_path}"
+            except Exception as e:
+                return f"Error uploading {r2_path}: {str(e)}"
+        
+        # Find all files to upload
+        files_to_upload = []
+        for root, dirs, files in os.walk('extracted'):
+            for file in files:
+                local_path = os.path.join(root, file)
+                # Create R2 path maintaining directory structure
+                r2_path = os.path.relpath(local_path, 'extracted').replace('\\', '/')
+                files_to_upload.append((local_path, r2_path))
+        
+        print(f"Found {len(files_to_upload)} files to upload")
+        
+        # Upload files in parallel
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(upload_file, local, r2) for local, r2 in files_to_upload]
+            
+            for future in as_completed(futures):
+                result = future.result()
+                if result.startswith("Error"):
+                    print(result)
+        
+        print(f"Upload complete! Total files uploaded: {upload_count}")
+        EOF
+        
+        # Run the upload script
+        python upload_to_r2.py
+    
+    - name: Update last processed release
+      if: steps.check_release.outputs.needs_update == 'true'
+      run: |
+        echo "${{ steps.check_release.outputs.latest_release }}" > .last_processed_release
+        
+        # Commit the update
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .last_processed_release
+        git commit -m "Update last processed release to ${{ steps.check_release.outputs.latest_release }}" || echo "No changes to commit"
+        git push || echo "No changes to push"
+    
+    - name: Summary
+      if: always()
+      run: |
+        echo "## Sync Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- Latest Release: ${{ steps.check_release.outputs.latest_release }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Update Needed: ${{ steps.check_release.outputs.needs_update }}" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.check_release.outputs.needs_update }}" == "true" ]; then
+          echo "- Images synced to R2 bucket: ${{ secrets.R2_BUCKET_NAME }}" >> $GITHUB_STEP_SUMMARY
+        fi
