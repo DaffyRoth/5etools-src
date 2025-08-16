@@ -1,0 +1,48 @@
+name: Sync with Upstream
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+    
+    - name: Configure Git
+      run: |
+        git config user.name 'github-actions[bot]'
+        git config user.email 'github-actions[bot]@users.noreply.github.com'
+    
+    - name: Add upstream remote
+      run: |
+        git remote add upstream https://github.com/5etools-mirror-3/5etools-src.git
+    
+    - name: Fetch upstream
+      run: git fetch upstream
+    
+    - name: Check for updates
+      id: check
+      run: |
+        LOCAL=$(git rev-parse HEAD)
+        REMOTE=$(git rev-parse upstream/main)
+        if [ "$LOCAL" != "$REMOTE" ]; then
+          echo "updates=true" >> $GITHUB_OUTPUT
+        else
+          echo "updates=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Merge upstream changes
+      if: steps.check.outputs.updates == 'true'
+      run: git merge upstream/main --no-edit
+    
+    - name: Push changes
+      if: steps.check.outputs.updates == 'true'
+      run: git push origin main
