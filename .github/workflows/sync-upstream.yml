@@ -2,15 +2,15 @@ name: Sync with Upstream
 
 on:
   schedule:
-    - cron: '0 6 * * *'
-  workflow_dispatch:
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+  workflow_dispatch:  # Manual trigger
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout
+    - name: Checkout main repo
       uses: actions/checkout@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -21,15 +21,58 @@ jobs:
         git config user.name 'github-actions[bot]'
         git config user.email 'github-actions[bot]@users.noreply.github.com'
     
-    - name: Add upstream remote
+    - name: Add upstream remote for main repo
       run: |
         git remote add upstream https://github.com/5etools-mirror-3/5etools-src.git
     
-    - name: Fetch upstream
-      run: git fetch upstream
+    - name: Fetch and merge main repo updates
+      id: main-update
+      run: |
+        git fetch upstream
+        LOCAL=$(git rev-parse HEAD)
+        REMOTE=$(git rev-parse upstream/main)
+        if [ "$LOCAL" != "$REMOTE" ]; then
+          echo "main-updated=true" >> $GITHUB_OUTPUT
+          git merge upstream/main --no-edit
+          git push origin main
+          echo "Main repository updated"
+        else
+          echo "main-updated=false" >> $GITHUB_OUTPUT
+          echo "Main repository is up to date"
+        fi
     
-    - name: Merge upstream changes
-      run: git merge upstream/main --no-edit
+    - name: Check images repository for updates
+      id: img-check
+      run: |
+        # Get the latest commit from upstream images repo
+        UPSTREAM_IMG_COMMIT=$(git ls-remote https://github.com/5etools-mirror-3/5etools-img.git HEAD | cut -f1)
+        
+        # Check if we have a record of the last processed commit
+        if [ -f .last-img-commit ]; then
+          LAST_IMG_COMMIT=$(cat .last-img-commit)
+        else
+          LAST_IMG_COMMIT=""
+        fi
+        
+        if [ "$UPSTREAM_IMG_COMMIT" != "$LAST_IMG_COMMIT" ]; then
+          echo "img-updated=true" >> $GITHUB_OUTPUT
+          echo "$UPSTREAM_IMG_COMMIT" > .last-img-commit
+          echo "Images repository has updates"
+        else
+          echo "img-updated=false" >> $GITHUB_OUTPUT
+          echo "Images repository is up to date"
+        fi
     
-    - name: Push changes
-      run: git push origin main
+    - name: Commit image tracking file if images updated
+      if: steps.img-check.outputs.img-updated == 'true'
+      run: |
+        git add .last-img-commit
+        git commit -m "Update images tracking - $(date)"
+        git push origin main
+    
+    - name: Trigger Vercel deployment if any updates
+      if: steps.main-update.outputs.main-updated == 'true' || steps.img-check.outputs.img-updated == 'true'
+      run: |
+        echo "Changes detected - Vercel will automatically redeploy"
+        echo "Main repo updated: ${{ steps.main-update.outputs.main-updated }}"
+        echo "Images updated: ${{ steps.img-check.outputs.img-updated }}"
